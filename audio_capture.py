@@ -23,11 +23,24 @@ class AudioCapture:
         Initialize audio capture.
         
         Args:
-            device_index: Specific audio device index, or None for default
+            device_index: Specific audio device index, or None for auto-detect
         """
         self._pyaudio: Optional[pyaudio.PyAudio] = None
         self._stream: Optional[pyaudio.Stream] = None
-        self._device_index = device_index
+        
+        # Smart device selection if not specified
+        if device_index is None:
+            self._initialize_pyaudio()
+            best_device = self.get_default_device()
+            if best_device:
+                self._device_index = best_device['index']
+                print(f"Auto-selected microphone: {best_device['name']}")
+            else:
+                self._device_index = None
+                print("Warning: No microphone found, using system default")
+        else:
+            self._device_index = device_index
+            
         self._is_recording = False
         self._audio_callback: Optional[Callable[[bytes], None]] = None
         self._record_thread: Optional[threading.Thread] = None
@@ -78,18 +91,83 @@ class AudioCapture:
         return devices
     
     def get_default_device(self) -> Optional[Dict[str, Any]]:
-        """Get the default input device info."""
+        """
+        Get the best input device intelligently.
+        Prioritizes built-in/Realtek mics over virtual devices.
+        """
         self._initialize_pyaudio()
         try:
-            info = self._pyaudio.get_default_input_device_info()
-            return {
-                'index': info['index'],
-                'name': info['name'],
-                'channels': info['maxInputChannels'],
-                'sample_rate': int(info['defaultSampleRate'])
-            }
-        except IOError:
+            # First, try Windows default
+            try:
+                default_info = self._pyaudio.get_default_input_device_info()
+                default_name = default_info['name'].lower()
+                
+                # If default is NOT a virtual device, use it
+                if not self._is_virtual_device(default_name):
+                    return {
+                        'index': default_info['index'],
+                        'name': default_info['name'],
+                        'channels': default_info['maxInputChannels'],
+                        'sample_rate': int(default_info['defaultSampleRate'])
+                    }
+            except IOError:
+                pass
+            
+            # If default is virtual, find best physical mic
+            devices = self.list_devices()
+            
+            # Priority list (in order)
+            priorities = [
+                'realtek',      # Realtek built-in
+                'microphone array',  # Generic array mic
+                'internal',     # Internal mic
+                'built-in',     # Built-in mic
+                'microphone',   # Any mic
+            ]
+            
+            # Try each priority
+            for priority_term in priorities:
+                for device in devices:
+                    name_lower = device['name'].lower()
+                    if priority_term in name_lower and not self._is_virtual_device(name_lower):
+                        return device
+            
+            # Fallback: first non-virtual device
+            for device in devices:
+                if not self._is_virtual_device(device['name'].lower()):
+                    return device
+             
+            # Last resort: any device
+            return devices[0] if devices else None
+                
+        except Exception as e:
+            print(f"Error detecting microphone: {e}")
             return None
+    
+    def _is_virtual_device(self, device_name: str) -> bool:
+        """
+        Check if a device is virtual (not a real microphone).
+        
+        Args:
+            device_name: Device name in lowercase
+            
+        Returns:
+            True if virtual, False if physical
+        """
+        virtual_keywords = [
+            'droidcam',
+            'virtual',
+            'loopback',
+            'stereo mix',
+            'what u hear',
+            'wave out mix',
+            'cable output',
+            'voicemeeter',
+            'obs virtual',
+            'snapcam',
+        ]
+        
+        return any(keyword in device_name for keyword in virtual_keywords)
     
     def _record_loop(self) -> None:
         """Recording loop that runs in a separate thread."""
