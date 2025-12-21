@@ -17,6 +17,7 @@ import sys
 import signal
 import threading
 import io
+from pathlib import Path
 
 from config import config
 from audio_capture import AudioCapture
@@ -48,7 +49,9 @@ class VoiceTypingApp:
         """Validate configuration."""
         if not config.api_key:
             print("Error: No API key found!")
-            print("Set GEMINI_API_KEY environment variable or add to config.json")
+            print(f"Checked environment variables and config.json")
+            print(f"Please ensure GEMINI_API_KEY is set in your .env file at:")
+            print(f"{Path(__file__).parent / '.env'}")
             return False
         return True
     

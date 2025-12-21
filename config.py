@@ -10,13 +10,15 @@ from typing import Optional
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+env_path = Path(__file__).parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 # Default configuration
 DEFAULT_CONFIG = {
     "api_key": "",
     "hotkey": "win+h",
-    "audio_device": null,
+    "audio_device": None,  # Deprecated: use audio_device_name instead
+    "audio_device_name": "Realtek",  # Hardcoded to always use laptop Realtek mic
     "overlay_enabled": True,
     "auto_start": False,
     "typing_delay": 0.01
