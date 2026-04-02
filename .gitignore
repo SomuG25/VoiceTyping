@@ -2,6 +2,11 @@
 .env
 config.json
 
+# Virtual environment
+.venv/
+venv/
+env/
+
 # Python
 __pycache__/
 *.py[cod]

@@ -43,10 +43,8 @@ class TextInjector:
             return
         
         with self._typing_lock:
-            if use_clipboard:
-                self._paste_text(text)
-            else:
-                self._type_text_direct(text)
+            # Always use clipboard paste for safety - avoids key code interpretation
+            self._paste_text(text)
     
     def _type_text_direct(self, text: str) -> None:
         """Type text directly using keyboard simulation."""
@@ -218,20 +216,25 @@ class VoiceCommands:
     @classmethod
     def process_text(cls, text: str) -> str:
         """
-        Process text and replace voice commands with their symbols.
+        Process text - returns text as-is (voice command substitution disabled).
+        This ensures literal words are typed, not symbols.
         
         Args:
-            text: Input text with possible voice commands
+            text: Input text
             
         Returns:
-            Processed text with commands replaced
+            Same text, unmodified (safe mode)
         """
-        result = text.lower()
+        # DISABLED: Voice command substitution to prevent accidental key presses
+        # User requested literal word typing only
+        # To re-enable, uncomment the loop below:
+        #
+        # result = text.lower()
+        # for command, replacement in cls.COMMANDS.items():
+        #     result = result.replace(command, replacement)
+        # return result
         
-        for command, replacement in cls.COMMANDS.items():
-            result = result.replace(command, replacement)
-        
-        return result
+        return text  # Return text as-is
 
 
 def test_injector():

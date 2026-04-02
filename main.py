@@ -1,306 +1,363 @@
 """
-Voice Typing Application - Main Entry Point (Batch Mode)
+Voice Typing Application — Main Entry Point
 
-A system-wide voice typing application for Windows 11 using Google Gemini API.
-Press Win+H to start recording, press again to stop and transcribe.
+Real-time voice-to-text using Gemini 3.1 Flash Live (Native Audio).
+Press Win+H to start/stop recording.
+Press Win+F4 to re-transcribe the last recording.
 
-Usage:
-    python main.py
-
-Requirements:
-    - Set GEMINI_API_KEY environment variable or add to config.json
-    - Install dependencies: pip install -r requirements.txt
+Free API key: https://aistudio.google.com/
 """
 
-import asyncio
 import sys
+import wave
 import signal
 import threading
-import io
+import asyncio
+import time
 from pathlib import Path
 
 from config import config
 from audio_capture import AudioCapture
-from batch_transcriber import BatchTranscriber
+from gemini_transcriber import GeminiTranscriber
 from hotkey_handler import HotkeyHandler
 from text_injector import TextInjector, VoiceCommands
 from arc_reactor_ui import ArcReactorUI
 from tray_app import TrayApp
+from batch_retry import transcribe_wav_file
 
 
 class VoiceTypingApp:
-    """Main Voice Typing application controller (Batch Mode)."""
-    
+    """Main Voice Typing application controller."""
+
     def __init__(self):
-        """Initialize the Voice Typing application."""
         self._audio_capture: AudioCapture = None
-        self._transcriber: BatchTranscriber = None
+        self._transcriber: GeminiTranscriber = None
         self._hotkey_handler: HotkeyHandler = None
         self._text_injector: TextInjector = None
         self._ui: ArcReactorUI = None
         self._tray: TrayApp = None
-        
+
         self._is_recording = False
         self._running = False
-        self._audio_buffer = io.BytesIO()  # Buffer to store recorded audio
-        self._buffer_lock = threading.Lock()
-    
+
+        # Dedicated asyncio loop for the Gemini Live WebSocket
+        self._loop: asyncio.AbstractEventLoop = None
+        self._loop_thread: threading.Thread = None
+
+        # Audio buffer — filled while recording, written to WAV on stop
+        self._audio_buffer: list = []
+
+    # -------------------------------------------------------------------------
+    # Setup
+    # -------------------------------------------------------------------------
+
     def _validate_config(self) -> bool:
-        """Validate configuration."""
         if not config.api_key:
             print("Error: No API key found!")
-            print(f"Checked environment variables and config.json")
-            print(f"Please ensure GEMINI_API_KEY is set in your .env file at:")
-            print(f"{Path(__file__).parent / '.env'}")
+            print(f"Please add GEMINI_API_KEY to: {Path(__file__).parent / '.env'}")
             return False
         return True
-    
+
     def _initialize_components(self) -> None:
-        """Initialize all application components."""
-        print("Initializing Voice Typing (Batch Mode)...")
-        
+        """Initialize all components and connect to Gemini once."""
+        print("Initializing Voice Typing (Native Audio Mode)...")
+
         # Audio capture
         self._audio_capture = AudioCapture(device_index=config.audio_device)
-        
-        # Batch transcriber (higher accuracy)
-        self._transcriber = BatchTranscriber(api_key=config.api_key)
+
+        # Background asyncio loop for Gemini Live API WebSocket
+        self._loop = asyncio.new_event_loop()
+        self._loop_thread = threading.Thread(
+            target=self._loop.run_forever,
+            daemon=True,
+            name="GeminiLiveLoop",
+        )
+        self._loop_thread.start()
+
+        # Transcriber — persistent session
+        self._transcriber = GeminiTranscriber(
+            api_key=config.api_key,
+            model=config.transcription_model,
+        )
         self._transcriber.set_transcription_callback(self._on_transcription)
         self._transcriber.set_status_callback(self._on_status)
-        
-        # Hotkey handler
-        self._hotkey_handler = HotkeyHandler(hotkey=config.hotkey)
-        
+        self._transcriber.set_interim_callback(self._on_interim)
+
+        # Connect ONCE at startup (no per-recording WebSocket overhead)
+        print("Connecting to Gemini Live API...")
+        future = asyncio.run_coroutine_threadsafe(
+            self._transcriber.connect(), self._loop
+        )
+        try:
+            connected = future.result(timeout=15)
+            if not connected:
+                print("Warning: Could not connect to Gemini at startup.")
+                print("         Will retry automatically on first recording.")
+        except Exception as e:
+            print(f"Warning: Startup connection error: {e}")
+
+        # Hotkey handler (multi-hotkey)
+        self._hotkey_handler = HotkeyHandler()
+        self._hotkey_handler.register(config.hotkey, self._toggle_recording)
+        self._hotkey_handler.register(config.retry_hotkey, self._retry_last_recording)
+
         # Text injector
         self._text_injector = TextInjector(typing_delay=config.typing_delay)
-        
-        # Arc Reactor UI (Iron Man Visualizer)
+
+        # Arc Reactor UI
         self._ui = ArcReactorUI()
-        
+
         # System tray
         self._tray = TrayApp()
-    
+
+    # -------------------------------------------------------------------------
+    # Callbacks
+    # -------------------------------------------------------------------------
+
     def _on_transcription(self, text: str) -> None:
-        """
-        Handle transcription result.
-        
-        Args:
-            text: Transcribed text
-        """
+        """Handle final transcription — type it into the active window."""
         if not text:
             return
-        
-        print(f"Transcribed: {text}")
-        
-        # Update waveform status
+
+        print(f"[App] Typed: {text}")
+
         if self._ui:
-            self._ui.set_status(f"✓ {text[:40]}..." if len(text) > 40 else f"✓ {text}")
-        
-        # Process voice commands
-        processed_text = VoiceCommands.process_text(text)
-        
-        # Type the text
+            preview = f"✓ {text[:40]}..." if len(text) > 40 else f"✓ {text}"
+            self._ui.set_status(preview)
+
+        processed = VoiceCommands.process_text(text)
         if self._text_injector:
-            self._text_injector.type_text(processed_text)
-    
+            self._text_injector.type_text(processed)
+
+    def _on_interim(self, chunk: str) -> None:
+        """Handle interim transcription chunks — show live in Arc Reactor UI."""
+        if self._ui:
+            self._ui.set_status(chunk)
+
     def _on_status(self, status: str) -> None:
-        """
-        Handle status update.
-        
-        Args:
-            status: Status message
-        """
+        """Handle status updates from transcriber."""
         print(f"Status: {status}")
-        
         if self._ui:
             self._ui.set_status(status)
-    
+
+    # -------------------------------------------------------------------------
+    # Recording control
+    # -------------------------------------------------------------------------
+
     def _toggle_recording(self) -> None:
-        """Toggle recording on/off."""
+        """Win+H: toggle recording on/off."""
         if self._is_recording:
             self._stop_recording()
         else:
             self._start_recording()
-    
+
     def _start_recording(self) -> None:
-        """Start voice recording."""
+        """Start recording — instant since session is already connected."""
         if self._is_recording:
             return
-        
-        print("Recording started... (Press Win+H to stop)")
+
+        print("\nRecording started — speak now (Win+H to stop)")
         self._is_recording = True
-        
-        # Clear audio buffer
-        with self._buffer_lock:
-            self._audio_buffer = io.BytesIO()
-        
-        # Update UI
+        self._audio_buffer = []  # reset audio buffer for this session
+
         if self._ui:
             self._ui.set_recording(True)
         if self._tray:
             self._tray.set_recording(True)
-        
-        # Start audio capture - audio goes to buffer AND waveform
+
+        # Tell transcriber to begin accepting audio (instant, no WebSocket cost)
+        self._transcriber.start_recording()
+
+        # Audio callback: stream to Gemini + buffer for retry save
         def on_audio(data: bytes):
-            with self._buffer_lock:
-                self._audio_buffer.write(data)
-            # Update waveform visualization
+            self._transcriber.send_audio_sync(data)
+            self._audio_buffer.append(data)
             if self._ui:
                 self._ui.update_amplitude(data)
-        
+
         self._audio_capture.start(on_audio)
-    
+
     def _stop_recording(self) -> None:
-        """Stop recording and transcribe."""
+        """Stop recording, save WAV, collect final transcription."""
         if not self._is_recording:
             return
-        
-        print("Recording stopped. Processing...")
+
+        print("Recording stopped — processing...")
         self._is_recording = False
-        
+
         # Stop audio capture
         if self._audio_capture:
             self._audio_capture.stop()
-        
-        # Update UI
+
+        # Save audio buffer as WAV for potential retry
+        self._save_last_recording()
+
         if self._ui:
             self._ui.set_recording(False)
             self._ui.set_status("Processing...")
         if self._tray:
             self._tray.set_recording(False)
-            self._tray.set_status('processing')
-        
-        # Get recorded audio
-        with self._buffer_lock:
-            audio_bytes = self._audio_buffer.getvalue()
-        
-        if not audio_bytes:
-            print("No audio recorded!")
-            if self._ui:
-                self._ui.set_status("No audio recorded")
-            return
-        
-        print(f"Recorded {len(audio_bytes)} bytes of audio")
-        
-        # DEBUG: Save audio to verify what's being recorded
-        import wave
-        debug_file = "last_recording.wav"
-        try:
-            with wave.open(debug_file, 'wb') as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(16000)
-                wf.writeframes(audio_bytes)
-            print(f"DEBUG: Saved audio to {debug_file} - play to verify!")
-        except Exception as e:
-            print(f"DEBUG: Could not save audio: {e}")
-        
-        # Transcribe in background thread
-        def transcribe():
-            result = self._transcriber.transcribe_sync(audio_bytes)
-            if result:
-                print(f"Transcription complete: {result[:50]}...")
-            else:
-                print("Transcription failed or empty")
-            
-            # Reset UI
+            self._tray.set_status("processing")
+
+        # Flush final transcription in background (keeps session alive)
+        def finish():
+            self._transcriber.stop_recording()  # waits for turn_complete
             if self._tray:
-                self._tray.set_status('idle')
-        
-        threading.Thread(target=transcribe, daemon=True).start()
-    
+                self._tray.set_status("idle")
+
+        threading.Thread(target=finish, daemon=True).start()
+
+    # -------------------------------------------------------------------------
+    # Last recording save + retry
+    # -------------------------------------------------------------------------
+
+    def _save_last_recording(self) -> None:
+        """Write the current audio buffer to last_recording.wav."""
+        if not self._audio_buffer:
+            return
+        try:
+            wav_path = Path(__file__).parent / config.last_recording_path
+            with wave.open(str(wav_path), "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)   # 16-bit PCM
+                wf.setframerate(16000)  # 16 kHz
+                for chunk in self._audio_buffer:
+                    wf.writeframes(chunk)
+            duration = sum(len(c) for c in self._audio_buffer) / (16000 * 2)
+            print(f"[Retry] Saved {wav_path.name} ({duration:.1f}s)")
+        except Exception as e:
+            print(f"[Retry] Could not save recording: {e}")
+
+    def _retry_last_recording(self) -> None:
+        """Win+F4: re-transcribe last_recording.wav using batch API."""
+        if self._is_recording:
+            print("[Retry] Cannot retry while recording is active")
+            return
+
+        wav_path = Path(__file__).parent / config.last_recording_path
+        if not wav_path.exists():
+            print("[Retry] No recording to retry (record something first)")
+            if self._ui:
+                self._ui.set_status("No recording to retry")
+            return
+
+        print(f"[Retry] Re-transcribing {wav_path.name} (Win+F4)...")
+        if self._ui:
+            self._ui.set_status("Retrying...")
+            self._ui.show()
+
+        def do_retry():
+            text = transcribe_wav_file(str(wav_path), config.api_key)
+            if text:
+                processed = VoiceCommands.process_text(text)
+                if self._text_injector:
+                    self._text_injector.type_text(processed)
+                if self._ui:
+                    preview = f"✓ {text[:40]}..." if len(text) > 40 else f"✓ {text}"
+                    self._ui.set_status(preview)
+            else:
+                print("[Retry] No text returned — check recording and API key")
+                if self._ui:
+                    self._ui.set_status("Retry failed")
+
+        threading.Thread(target=do_retry, daemon=True).start()
+
+    # -------------------------------------------------------------------------
+    # App lifecycle
+    # -------------------------------------------------------------------------
+
     def _on_exit(self) -> None:
-        """Handle application exit."""
         print("Exiting Voice Typing...")
         self.stop()
-    
+
     def start(self) -> None:
-        """Start the Voice Typing application."""
-        # Validate config
         if not self._validate_config():
             sys.exit(1)
-        
-        # Initialize components
+
         self._initialize_components()
         self._running = True
-        
-        # Start waveform UI
+
         if self._ui:
             self._ui.start()
-        
-        # Start system tray
+
         if self._tray:
-            self._tray.start(
-                on_toggle=self._toggle_recording,
-                on_exit=self._on_exit
-            )
+            self._tray.start(on_toggle=self._toggle_recording, on_exit=self._on_exit)
+            hotkey_display = config.hotkey.upper().replace("+", " + ")
             self._tray.show_notification(
                 "Voice Typing",
-                f"Press {config.hotkey.upper().replace('+', ' + ')} to start/stop recording"
+                f"{hotkey_display} to record  |  Win+F4 to retry",
             )
-        
-        # Start hotkey listener
+
         if self._hotkey_handler:
-            self._hotkey_handler.start(self._toggle_recording)
-        
-        print(f"\nVoice Typing started! (Batch Mode)")
-        print(f"Press {config.hotkey.upper()} to start recording")
-        print(f"Press {config.hotkey.upper()} again to stop and transcribe")
-        print("The app is running in the system tray.\n")
-    
+            self._hotkey_handler.start()
+
+        print(f"\nVoice Typing ready!")
+        print(f"  {config.hotkey.upper()}   → start / stop recording")
+        print(f"  WIN+F4  → retry last recording")
+        print("App is running in the system tray.\n")
+
     def stop(self) -> None:
-        """Stop the Voice Typing application."""
         if not self._running:
             return
-        
         self._running = False
-        
-        # Stop recording if active
+
         if self._is_recording:
             self._audio_capture.stop()
             self._is_recording = False
-        
-        # Stop components
+
         if self._hotkey_handler:
             self._hotkey_handler.stop()
-        
+
+        # Disconnect from Gemini cleanly
+        if self._loop and self._transcriber:
+            future = asyncio.run_coroutine_threadsafe(
+                self._transcriber.disconnect(), self._loop
+            )
+            try:
+                future.result(timeout=5)
+            except Exception:
+                pass
+
         if self._ui:
             self._ui.stop()
-        
         if self._tray:
             self._tray.stop()
-        
+
+        # Stop the asyncio loop
+        if self._loop and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._loop.stop)
+
         print("Voice Typing stopped.")
-    
+
     def run(self) -> None:
-        """Run the application (blocking)."""
         self.start()
-        
-        # Handle Ctrl+C
+
         def signal_handler(sig, frame):
-            print("\nReceived interrupt signal...")
+            print("\nInterrupt received...")
             self.stop()
             sys.exit(0)
-        
+
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
-        
-        # Keep main thread alive
+
         try:
             while self._running:
-                import time
                 time.sleep(0.5)
         except KeyboardInterrupt:
             self.stop()
 
 
+# -------------------------------------------------------------------------
+# Entry point
+# -------------------------------------------------------------------------
+
 def main():
-    """Main entry point."""
     print("=" * 50)
-    print("  Voice Typing - Batch Mode")
-    print("  Powered by Google Gemini API")
+    print("  Voice Typing")
+    print("  Gemini 3.1 Flash Live — Native Audio")
     print("=" * 50)
     print()
-    
+
     app = VoiceTypingApp()
     app.run()
 
