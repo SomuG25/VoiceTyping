@@ -20,7 +20,7 @@ DEFAULT_CONFIG = {
     "retry_hotkey": "win+f4",
     "audio_device": None,
     "audio_device_name": "Realtek",
-    "transcription_model": "gemini-3.1-flash-live-preview",
+    "transcription_model": "gemini-live-2.5-flash-native-audio",
     "last_recording_path": "last_recording.wav",
     "overlay_enabled": True,
     "auto_start": False,

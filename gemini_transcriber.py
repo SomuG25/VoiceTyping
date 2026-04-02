@@ -15,9 +15,9 @@ from typing import Callable, Optional
 from google import genai
 from google.genai import types
 
-# Gemini 3.1 Flash Live — newest native audio model (March 2026)
-# Fallback: "gemini-2.5-flash-native-audio" (stable GA)
-DEFAULT_MODEL = "gemini-3.1-flash-live-preview"
+# gemini-live-2.5-flash-native-audio = GA (stable, correct official name) ✅
+# gemini-3.1-flash-live-preview        = Preview (inconsistent, skip for now)
+DEFAULT_MODEL = "gemini-live-2.5-flash-native-audio"
 
 # Reconnect proactively before the 10-minute hard session limit
 SESSION_MAX_SECONDS = 9 * 60  # 9 minutes
