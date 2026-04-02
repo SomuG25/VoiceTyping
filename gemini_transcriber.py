@@ -226,7 +226,7 @@ class GeminiTranscriber:
         print("[Gemini] Recording started")
 
     async def _stop_recording_async(self) -> None:
-        """End a recording session, collect final transcription, keep session alive."""
+        """End a recording session, emit ALL buffered text at once, keep session alive."""
         self._recording = False
 
         if not (self._session and self._is_connected):
@@ -238,16 +238,20 @@ class GeminiTranscriber:
                 self._turn_complete_event.clear()
 
             await self._session.send_realtime_input(audio_stream_end=True)
-            print("[Gemini] Audio stream ended — waiting for final transcription...")
+            print("[Gemini] Audio stream ended — waiting for final chunk...")
 
+            # Wait for the last turn_complete after stream end (up to 3s)
             try:
                 await asyncio.wait_for(self._turn_complete_event.wait(), timeout=3.0)
             except asyncio.TimeoutError:
-                print("[Gemini] Timeout — flushing buffer")
-                self._emit_transcription()
+                print("[Gemini] Timeout — emitting whatever was buffered")
+
+            # Emit ALL text collected during the recording as a single string
+            self._emit_transcription()
 
         except Exception as e:
             print(f"[Gemini] Stop recording error: {e}")
+            self._emit_transcription()  # best-effort flush on error
 
     def start_recording(self) -> None:
         """Thread-safe: begin recording. Call from audio capture / main thread."""
@@ -322,9 +326,9 @@ class GeminiTranscriber:
 
         HOW IT WORKS:
         - Server-side VAD detects natural pauses (silence_duration_ms = 600ms)
-        - input_transcription chunks arrive after each VAD-detected pause
-        - turn_complete fires after each utterance → we emit text immediately
-        - This gives live per-sentence typing during recording
+        - input_transcription chunks arrive after each pause → buffered
+        - turn_complete fires after each utterance → we only set the event
+        - ALL buffered text is emitted as ONE string when Win+H stop is pressed
         """
         while self._running and self._is_connected:
             try:
@@ -348,10 +352,10 @@ class GeminiTranscriber:
                                 if self._on_interim:
                                     self._on_interim(text.strip())
 
-                        # VAD pause detected → type text now, don't wait for Win+H
+                        # VAD pause detected — keep buffering, DON'T type yet
+                        # All text will type at once on Win+H stop
                         if msg.server_content.turn_complete:
-                            print("[Gemini] VAD pause — typing now")
-                            self._emit_transcription()
+                            print("[Gemini] VAD pause — buffering (types on Win+H stop)")
                             if self._turn_complete_event:
                                 self._turn_complete_event.set()
 
