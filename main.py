@@ -117,9 +117,13 @@ class VoiceTypingApp:
         print("\n[REC] STARTED — speak now (double-space to stop)")
         self._is_recording = True
         self._audio_buffer = []
+        self._recording_start_time = time.time()
 
         if self._ui:
             self._ui.set_recording(True)
+            self._ui.set_status("Listening")
+            self._ui.set_live_text("")
+            self._ui.set_core_text("REC")
         if self._tray:
             self._tray.set_recording(True)
 
@@ -130,6 +134,37 @@ class VoiceTypingApp:
 
         self._audio_capture.start(on_audio)
 
+        # Background thread: timer in core + periodic live transcription
+        def live_display():
+            last_transcribe = time.time()
+            while self._is_recording:
+                elapsed = int(time.time() - self._recording_start_time)
+                mins, secs = divmod(elapsed, 60)
+                timer = f"{mins}:{secs:02d}"
+
+                if self._ui:
+                    # Timer inside the reactor core
+                    self._ui.set_core_text(timer)
+                    self._ui.set_status("Listening")
+
+                # Every ~3 seconds: transcribe the buffer so far, show live words
+                if elapsed > 2 and time.time() - last_transcribe > 3:
+                    last_transcribe = time.time()
+                    try:
+                        buf_copy = list(self._audio_buffer)
+                        if len(buf_copy) < 64:  # need at least ~4s of audio
+                            continue
+                        audio_data = b"".join(buf_copy)
+                        interim = self._transcriber.transcribe(audio_data)
+                        if interim and self._ui and self._is_recording:
+                            self._ui.set_live_text(interim)
+                    except Exception:
+                        pass
+
+                time.sleep(0.3)
+
+        threading.Thread(target=live_display, daemon=True).start()
+
     def _stop_recording(self) -> None:
         if not self._is_recording:
             return
@@ -139,6 +174,10 @@ class VoiceTypingApp:
 
         if self._audio_capture:
             self._audio_capture.stop()
+
+        if self._ui:
+            self._ui.set_core_text("...")
+            self._ui.set_live_text("")
 
         # Save audio + transcribe
         self._save_and_transcribe()

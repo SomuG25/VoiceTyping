@@ -1,11 +1,9 @@
 """
 Arc Reactor UI - Iron Man Mark III "Jarvis" Edition
-Features:
-- Real-time transcription text below the reactor ring
-- "Amber" Processing State (Jarvis Analysis Mode)
-- Parallax/Gyroscopic Ring Effects
-- Radar Sweep Animation
-- Reactive Energy Overload
+- Timer inside the reactor core while recording
+- Live transcription text below the ring (words appear as you speak)
+- Amber processing state with scanner sweep
+- Parallax rings, reactive energy pulse
 """
 
 import tkinter as tk
@@ -15,9 +13,8 @@ import math
 from typing import Optional
 
 class ArcReactorUI:
-    """Iron Man Arc Reactor style voice visualizer with live transcription."""
+    """Iron Man Arc Reactor overlay with live transcription."""
 
-    # --- STARK INDUSTRIES PALETTE ---
     BG_COLOR = "#050505"
 
     COLOR_LISTEN_MAIN = "#00F2FF"
@@ -31,11 +28,11 @@ class ArcReactorUI:
     HUD_DARK = "#1A252A"
     HUD_GRID = "#004852"
 
-    CANVAS_SIZE = 340
-    CENTER_X = 170
+    CANVAS_SIZE = 360
+    CENTER_X = 180
     CENTER_Y = 150
     BASE_RADIUS = 35
-    TEXT_MAX_CHARS = 80
+    TEXT_MAX_CHARS = 60
 
     def __init__(self):
         self._root: Optional[tk.Tk] = None
@@ -53,7 +50,8 @@ class ArcReactorUI:
         self._scan_direction = 1
 
         self._status_text = ""
-        self._live_text = ""  # interim transcription shown during recording
+        self._core_text = ""    # timer shown inside the core
+        self._live_text = ""    # live transcription below the ring
 
     # ------------------------------------------------------------------
     # Window
@@ -65,7 +63,6 @@ class ArcReactorUI:
         self._root.overrideredirect(True)
         self._root.attributes('-topmost', True)
         self._root.attributes('-transparentcolor', self.BG_COLOR)
-
         self._root.configure(bg=self.BG_COLOR)
         self._root.geometry(f"{self.CANVAS_SIZE}x{self.CANVAS_SIZE}")
 
@@ -110,47 +107,54 @@ class ArcReactorUI:
         pulse = (math.sin(self._rotation_angle * 0.1) * 2) + 2
         expansion = (amp * 40) if self._is_recording else 5
 
-        # Rings
+        # ---- Rings ----
         self._draw_palladium_ring(cx, cy, 65, 85, main, 10)
         self._draw_gyro_rings(cx, cy, 95 + (expansion * 0.5), main, spin)
 
-        # Core
+        # ---- Core glow ----
+        glow_rad = self.BASE_RADIUS + expansion + pulse
         self._canvas.create_oval(
-            cx - self.BASE_RADIUS - expansion - pulse,
-            cy - self.BASE_RADIUS - expansion - pulse,
-            cx + self.BASE_RADIUS + expansion + pulse,
-            cy + self.BASE_RADIUS + expansion + pulse,
+            cx - glow_rad, cy - glow_rad,
+            cx + glow_rad, cy + glow_rad,
             outline=glow, width=2,
         )
+
+        # ---- Core solid ----
+        core_rad = self.BASE_RADIUS + (expansion * 0.3)
         self._canvas.create_oval(
-            cx - self.BASE_RADIUS - (expansion * 0.3),
-            cy - self.BASE_RADIUS - (expansion * 0.3),
-            cx + self.BASE_RADIUS + (expansion * 0.3),
-            cy + self.BASE_RADIUS + (expansion * 0.3),
+            cx - core_rad, cy - core_rad,
+            cx + core_rad, cy + core_rad,
             fill=core, outline=main, width=3,
         )
 
-        # Scanner (processing mode)
+        # ---- Core text: timer (inside the core) ----
+        if self._core_text:
+            self._canvas.create_text(
+                cx, cy, text=self._core_text,
+                fill=self.HUD_DARK, font=("Consolas", 13, "bold"),
+            )
+
+        # ---- Scanner (processing mode) ----
         if not self._is_recording:
             self._draw_scanner(cx, cy, main)
 
-        # Ticks
+        # ---- Ticks ----
         self._draw_ticks(cx, cy, 125, self.HUD_GRID)
 
-        # ---- STATUS LINE (below ring) ----
+        # ---- Status line (below ring) ----
         if self._status_text:
             self._canvas.create_text(
                 cx, cy + 95, text=self._status_text,
-                fill=main, font=("Consolas", 10),
+                fill=main, font=("Consolas", 9),
             )
 
-        # ---- LIVE TRANSCRIPTION (bottom area) ----
+        # ---- Live transcription (bottom area) ----
         if self._live_text:
             display = self._live_text if len(self._live_text) <= self.TEXT_MAX_CHARS \
                       else "..." + self._live_text[-(self.TEXT_MAX_CHARS - 3):]
             self._canvas.create_text(
-                cx, cy + 140, text=display,
-                fill="#FFFFFF", font=("Consolas", 13),
+                cx, cy + 135, text=display,
+                fill="#CCCCCC", font=("Consolas", 12),
                 width=self.CANVAS_SIZE - 40, anchor="n",
             )
 
@@ -238,16 +242,22 @@ class ArcReactorUI:
         if recording:
             self.show()
             self._live_text = ""
+            self._core_text = ""
             with self._amplitude_lock:
                 self._amplitude = 0.0
         else:
+            self._core_text = ""
             self._root.after(3000, self.hide)
 
     def set_status(self, status: str):
         self._status_text = status
 
+    def set_core_text(self, text: str):
+        """Text displayed inside the reactor core (timer during recording)."""
+        self._core_text = text
+
     def set_live_text(self, text: str):
-        """Show live/interim transcription during recording."""
+        """Live transcription words shown below the reactor ring."""
         self._live_text = text
 
     def show(self):
