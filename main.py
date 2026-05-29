@@ -147,17 +147,23 @@ class VoiceTypingApp:
                     self._ui.set_core_text(timer)
                     self._ui.set_status("Listening")
 
-                # Every ~3 seconds: transcribe the buffer so far, show live words
+                # Every ~3 seconds: transcribe buffer so far, show live words
                 if elapsed > 2 and time.time() - last_transcribe > 3:
                     last_transcribe = time.time()
                     try:
                         buf_copy = list(self._audio_buffer)
-                        if len(buf_copy) < 64:  # need at least ~4s of audio
+                        if len(buf_copy) < 64:
                             continue
                         audio_data = b"".join(buf_copy)
                         interim = self._transcriber.transcribe(audio_data)
                         if interim and self._ui and self._is_recording:
-                            self._ui.set_live_text(interim)
+                            # Clean: strip trailing incomplete words/fragments
+                            clean = interim.strip()
+                            # Remove trailing incomplete word (last word after space)
+                            if " " in clean:
+                                # Only show complete sentences/phrases
+                                clean = " ".join(clean.split(" ")[:-1]) if len(clean.split(" ")) > 3 else clean
+                            self._ui.set_live_text(clean)
                     except Exception:
                         pass
 

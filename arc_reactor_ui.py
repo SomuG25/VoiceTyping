@@ -1,10 +1,10 @@
 """
 Arc Reactor UI - Iron Man Mark III "Jarvis" Edition
+- True translucent overlay via Win32 layered window
+- Gradient glass panel with HUD border + corner accents
+- Glow text with layered shadow rendering
+- Sci-fi scanline effect
 - Timer inside the reactor core while recording
-- Live transcription with dark backdrop panel for readability
-- Text shadow rendering — visible on any desktop background
-- Amber processing state with scanner sweep
-- Parallax rings, reactive energy pulse
 """
 
 import tkinter as tk
@@ -13,10 +13,16 @@ import numpy as np
 import math
 from typing import Optional
 
-class ArcReactorUI:
-    """Iron Man Arc Reactor overlay with readable live transcription."""
+# Win32 for layered-window translucency
+import win32gui
+import win32con
 
-    BG_COLOR = "#050505"
+
+class ArcReactorUI:
+    """Translucent Iron Man HUD overlay with live transcription."""
+
+    TRANSPARENT_KEY = "#050505"
+    GLASS_ALPHA = 220  # 0-255, 220 = ~86% opaque
 
     COLOR_LISTEN_MAIN = "#00F2FF"
     COLOR_LISTEN_CORE = "#FFFFFF"
@@ -27,13 +33,10 @@ class ArcReactorUI:
     COLOR_PROCESS_GLOW = "#FF4500"
 
     HUD_DARK = "#1A252A"
-    HUD_GRID = "#004852"
+    HUD_GRID = "#003840"
 
-    # Transparent key — must NOT be used for any visible element
-    TRANSPARENT_KEY = "#050505"
-
-    CANVAS_SIZE = 400
-    CENTER_X = 200
+    CANVAS_SIZE = 520
+    CENTER_X = 260
     CENTER_Y = 150
     BASE_RADIUS = 35
     TEXT_MAX_CHARS = 55
@@ -52,6 +55,7 @@ class ArcReactorUI:
         self._rotation_angle = 0.0
         self._scan_line_y = 0.0
         self._scan_direction = 1
+        self._pulse_phase = 0.0  # For text glow animation
 
         self._status_text = ""
         self._core_text = ""
@@ -73,7 +77,7 @@ class ArcReactorUI:
         screen_w = self._root.winfo_screenwidth()
         screen_h = self._root.winfo_screenheight()
         x = (screen_w - self.CANVAS_SIZE) // 2
-        y = screen_h - self.CANVAS_SIZE - 30
+        y = screen_h - self.CANVAS_SIZE - 20
         self._root.geometry(f"+{x}+{y}")
 
         self._canvas = tk.Canvas(
@@ -82,6 +86,24 @@ class ArcReactorUI:
         )
         self._canvas.pack()
         self._root.withdraw()
+
+        # Apply Win32 layered window for true translucency
+        self._root.after(150, self._apply_glass)
+
+    def _apply_glass(self):
+        """Enable per-window alpha blending via Win32 layered window."""
+        try:
+            hwnd = self._root.winfo_id()
+            ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
+            win32gui.SetWindowLong(
+                hwnd, win32con.GWL_EXSTYLE,
+                ex_style | win32con.WS_EX_LAYERED | win32con.WS_EX_TRANSPARENT,
+            )
+            win32gui.SetLayeredWindowAttributes(
+                hwnd, 0, self.GLASS_ALPHA, win32con.LWA_ALPHA,
+            )
+        except Exception:
+            pass  # Graceful fallback if Win32 call fails
 
     # ------------------------------------------------------------------
     # Palette
@@ -93,34 +115,91 @@ class ArcReactorUI:
         return self.COLOR_PROCESS_MAIN, self.COLOR_PROCESS_CORE, self.COLOR_PROCESS_GLOW
 
     # ------------------------------------------------------------------
-    # Draw helpers
+    # Drawing helpers
     # ------------------------------------------------------------------
 
-    def _shadow_text(self, x, y, text, fill="#FFFFFF", shadow="#0A0A0A",
-                     font=("Consolas", 12), anchor="n", width=None):
-        """Text with a 1px offset shadow — readable on ANY background."""
-        # Shadow (drawn first, behind)
+    def _glow_text(self, x, y, text, color, glow, font, width=None, anchor="n"):
+        """Multi-layer glow text — draws 3 layers for soft neon effect."""
+        # Outer glow (dimmest, widest spread)
+        self._canvas.create_text(
+            x + 2, y + 2, text=text, fill=glow, font=font,
+            anchor=anchor, width=width, state="normal",
+        )
+        self._canvas.create_text(
+            x - 2, y - 2, text=text, fill=glow, font=font,
+            anchor=anchor, width=width, state="normal",
+        )
+        # Inner glow
         self._canvas.create_text(
             x + 1, y + 1, text=text,
-            fill=shadow, font=font, anchor=anchor, width=width,
+            fill="#406678", font=font, anchor=anchor, width=width,
         )
         # Foreground
         self._canvas.create_text(
-            x, y, text=text,
-            fill=fill, font=font, anchor=anchor, width=width,
+            x, y, text=text, fill=color, font=font, anchor=anchor, width=width,
         )
 
-    def _rounded_rect(self, x1, y1, x2, y2, r, **kwargs):
-        """Draw a rounded rectangle on the canvas."""
-        points = [
-            x1 + r, y1, x2 - r, y1,
-            x2, y1, x2, y1 + r,
-            x2, y2 - r, x2, y2,
-            x2 - r, y2, x1 + r, y2,
-            x1, y2, x1, y2 - r,
-            x1, y1 + r, x1, y1,
-        ]
-        return self._canvas.create_polygon(points, smooth=True, **kwargs)
+    def _draw_gradient_panel(self, x1, y1, x2, y2, r=14):
+        """Glass panel with vertical gradient + HUD border + corner accents."""
+        h = y2 - y1
+
+        # Gradient: lighter glass at top → deeper at bottom
+        for i in range(int(h)):
+            ratio = i / max(h - 1, 1)
+            r_val = int(18 + (1 - ratio) * 14)
+            g_val = int(24 + (1 - ratio) * 14)
+            b_val = int(30 + (1 - ratio) * 14)
+            color = f"#{r_val:02x}{g_val:02x}{b_val:02x}"
+            self._canvas.create_line(x1, y1 + i, x2, y1 + i, fill=color)
+
+        # Rounded border — cyan HUD outline
+        points = self._rounded_points(x1, y1, x2, y2, r, steps=20)
+        self._canvas.create_polygon(points, fill="", outline="#1A4A5A", width=2, smooth=True)
+
+        # Corner accents — small diagonal tech marks at each corner
+        for cx, cy, dx, dy in [
+            (x1 + 6, y1 + 6, 1, 1),   # top-left
+            (x2 - 6, y1 + 6, -1, 1),  # top-right
+            (x1 + 6, y2 - 6, 1, -1),  # bottom-left
+            (x2 - 6, y2 - 6, -1, -1), # bottom-right
+        ]:
+            for i in range(3):
+                self._canvas.create_line(
+                    cx, cy + i * 5 * dy,
+                    cx + 12 * dx, cy + i * 5 * dy,
+                    fill="#00F2FF", width=1,
+                )
+                self._canvas.create_line(
+                    cx + i * 5 * dx, cy,
+                    cx + i * 5 * dx, cy + 12 * dy,
+                    fill="#00F2FF", width=1,
+                )
+
+        # Scanlines — faint horizontal lines for HUD screen effect
+        for i in range(int((y2 - y1) // 8)):
+            ly = y1 + 12 + i * 8
+            if ly < y2 - 12:
+                self._canvas.create_line(
+                    x1 + 14, ly, x2 - 14, ly,
+                    fill="#FFFFFF", width=1, stipple="gray25",
+                )
+
+    def _rounded_points(self, x1, y1, x2, y2, r, steps=10):
+        """Generate polygon points for a rounded rectangle."""
+        points = []
+        for a in range(steps):
+            ang = math.pi / 2 * (a / (steps - 1))
+            points.extend([x2 - r + r * math.cos(ang), y1 + r - r * math.sin(ang)])
+        for a in range(steps):
+            ang = math.pi / 2 * (a / (steps - 1))
+            points.extend([x2 - r + r * math.sin(ang), y2 - r + r * math.cos(ang)])
+        for a in range(steps):
+            ang = math.pi / 2 * (a / (steps - 1))
+            points.extend([x1 + r - r * math.cos(ang), y2 - r + r * math.sin(ang)])
+        for a in range(steps):
+            ang = math.pi / 2 * (a / (steps - 1))
+            points.extend([x1 + r - r * math.sin(ang), y1 + r - r * math.cos(ang)])
+        return points
 
     # ------------------------------------------------------------------
     # Draw
@@ -161,7 +240,7 @@ class ArcReactorUI:
             fill=core, outline=main, width=3,
         )
 
-        # ---- Core text: timer (inside the core) ----
+        # ---- Core text: timer ----
         if self._core_text:
             self._canvas.create_text(
                 cx, cy, text=self._core_text,
@@ -175,33 +254,27 @@ class ArcReactorUI:
         # ---- Ticks ----
         self._draw_ticks(cx, cy, 125, self.HUD_GRID)
 
-        # ---- Status line (below ring) ----
+        # ---- Status line ----
         if self._status_text:
-            self._shadow_text(
+            self._canvas.create_text(
                 cx, cy + 95, text=self._status_text,
-                fill=main, shadow="#020202", font=("Consolas", 9),
+                fill=main, font=("Consolas", 9),
             )
 
-        # ---- Live transcription panel (bottom) ----
+        # ---- Live transcription panel ----
         if self._live_text:
-            display = self._live_text[-self.TEXT_MAX_CHARS:]
-            text_w = min(len(display) * 8, self.CANVAS_SIZE - 40)
-            panel_x1 = cx - text_w / 2 - 16
-            panel_x2 = cx + text_w / 2 + 16
+            display = self._live_text
+            panel_w = min(len(display) * 10 + 40, self.CANVAS_SIZE - 40)
+            panel_x1 = cx - panel_w / 2
+            panel_x2 = cx + panel_w / 2
             panel_y1 = cy + 112
-            panel_y2 = cy + 162
+            panel_y2 = cy + 172
 
-            # Dark opaque backdrop panel with rounded corners
-            self._rounded_rect(
-                panel_x1, panel_y1, panel_x2, panel_y2, r=10,
-                fill="#0C0C0C", outline="#222222", width=1,
-            )
-
-            # Shadow + foreground text on the panel
-            self._shadow_text(
-                cx, cy + 137, text=display,
-                fill="#EEEEEE", shadow="#020202",
-                font=("Consolas", 14, "bold"),
+            self._draw_gradient_panel(panel_x1, panel_y1, panel_x2, panel_y2, r=14)
+            self._glow_text(
+                cx, (panel_y1 + panel_y2) // 2, text=display,
+                color="#E8F4FF", glow="#003848",
+                font=("Consolas", 15, "bold"),
             )
 
     def _draw_palladium_ring(self, cx, cy, r_in, r_out, color, segments):
@@ -259,6 +332,7 @@ class ArcReactorUI:
         if not self._running:
             return
         self._rotation_angle += 1
+        self._pulse_phase += 0.05
         with self._amplitude_lock:
             self._amplitude *= 0.85
         self._draw_reactor()
