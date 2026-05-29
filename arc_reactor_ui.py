@@ -175,13 +175,13 @@ class ArcReactorUI:
                     fill="#00F2FF", width=1,
                 )
 
-        # Scanlines — faint horizontal lines for HUD screen effect
-        for i in range(int((y2 - y1) // 8)):
-            ly = y1 + 12 + i * 8
-            if ly < y2 - 12:
+        # Scanlines — very faint horizontal lines for HUD screen effect
+        for i in range(int((y2 - y1) // 10)):
+            ly = y1 + 14 + i * 10
+            if ly < y2 - 14:
                 self._canvas.create_line(
-                    x1 + 14, ly, x2 - 14, ly,
-                    fill="#FFFFFF", width=1, stipple="gray25",
+                    x1 + 16, ly, x2 - 16, ly,
+                    fill="#1A2A30", width=1,
                 )
 
     def _rounded_points(self, x1, y1, x2, y2, r, steps=10):
