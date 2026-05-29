@@ -1,7 +1,8 @@
 """
 Arc Reactor UI - Iron Man Mark III "Jarvis" Edition
 - Timer inside the reactor core while recording
-- Live transcription text below the ring (words appear as you speak)
+- Live transcription with dark backdrop panel for readability
+- Text shadow rendering — visible on any desktop background
 - Amber processing state with scanner sweep
 - Parallax rings, reactive energy pulse
 """
@@ -13,7 +14,7 @@ import math
 from typing import Optional
 
 class ArcReactorUI:
-    """Iron Man Arc Reactor overlay with live transcription."""
+    """Iron Man Arc Reactor overlay with readable live transcription."""
 
     BG_COLOR = "#050505"
 
@@ -28,11 +29,14 @@ class ArcReactorUI:
     HUD_DARK = "#1A252A"
     HUD_GRID = "#004852"
 
-    CANVAS_SIZE = 360
-    CENTER_X = 180
+    # Transparent key — must NOT be used for any visible element
+    TRANSPARENT_KEY = "#050505"
+
+    CANVAS_SIZE = 400
+    CENTER_X = 200
     CENTER_Y = 150
     BASE_RADIUS = 35
-    TEXT_MAX_CHARS = 60
+    TEXT_MAX_CHARS = 55
 
     def __init__(self):
         self._root: Optional[tk.Tk] = None
@@ -50,8 +54,8 @@ class ArcReactorUI:
         self._scan_direction = 1
 
         self._status_text = ""
-        self._core_text = ""    # timer shown inside the core
-        self._live_text = ""    # live transcription below the ring
+        self._core_text = ""
+        self._live_text = ""
 
     # ------------------------------------------------------------------
     # Window
@@ -62,19 +66,19 @@ class ArcReactorUI:
         self._root.title("Voice Typing HUD")
         self._root.overrideredirect(True)
         self._root.attributes('-topmost', True)
-        self._root.attributes('-transparentcolor', self.BG_COLOR)
-        self._root.configure(bg=self.BG_COLOR)
+        self._root.attributes('-transparentcolor', self.TRANSPARENT_KEY)
+        self._root.configure(bg=self.TRANSPARENT_KEY)
         self._root.geometry(f"{self.CANVAS_SIZE}x{self.CANVAS_SIZE}")
 
         screen_w = self._root.winfo_screenwidth()
         screen_h = self._root.winfo_screenheight()
         x = (screen_w - self.CANVAS_SIZE) // 2
-        y = screen_h - self.CANVAS_SIZE - 40
+        y = screen_h - self.CANVAS_SIZE - 30
         self._root.geometry(f"+{x}+{y}")
 
         self._canvas = tk.Canvas(
             self._root, width=self.CANVAS_SIZE, height=self.CANVAS_SIZE,
-            bg=self.BG_COLOR, highlightthickness=0,
+            bg=self.TRANSPARENT_KEY, highlightthickness=0,
         )
         self._canvas.pack()
         self._root.withdraw()
@@ -87,6 +91,36 @@ class ArcReactorUI:
         if self._is_recording:
             return self.COLOR_LISTEN_MAIN, self.COLOR_LISTEN_CORE, self.COLOR_LISTEN_GLOW
         return self.COLOR_PROCESS_MAIN, self.COLOR_PROCESS_CORE, self.COLOR_PROCESS_GLOW
+
+    # ------------------------------------------------------------------
+    # Draw helpers
+    # ------------------------------------------------------------------
+
+    def _shadow_text(self, x, y, text, fill="#FFFFFF", shadow="#0A0A0A",
+                     font=("Consolas", 12), anchor="n", width=None):
+        """Text with a 1px offset shadow — readable on ANY background."""
+        # Shadow (drawn first, behind)
+        self._canvas.create_text(
+            x + 1, y + 1, text=text,
+            fill=shadow, font=font, anchor=anchor, width=width,
+        )
+        # Foreground
+        self._canvas.create_text(
+            x, y, text=text,
+            fill=fill, font=font, anchor=anchor, width=width,
+        )
+
+    def _rounded_rect(self, x1, y1, x2, y2, r, **kwargs):
+        """Draw a rounded rectangle on the canvas."""
+        points = [
+            x1 + r, y1, x2 - r, y1,
+            x2, y1, x2, y1 + r,
+            x2, y2 - r, x2, y2,
+            x2 - r, y2, x1 + r, y2,
+            x1, y2, x1, y2 - r,
+            x1, y1 + r, x1, y1,
+        ]
+        return self._canvas.create_polygon(points, smooth=True, **kwargs)
 
     # ------------------------------------------------------------------
     # Draw
@@ -143,19 +177,31 @@ class ArcReactorUI:
 
         # ---- Status line (below ring) ----
         if self._status_text:
-            self._canvas.create_text(
+            self._shadow_text(
                 cx, cy + 95, text=self._status_text,
-                fill=main, font=("Consolas", 9),
+                fill=main, shadow="#020202", font=("Consolas", 9),
             )
 
-        # ---- Live transcription (bottom area) ----
+        # ---- Live transcription panel (bottom) ----
         if self._live_text:
-            display = self._live_text if len(self._live_text) <= self.TEXT_MAX_CHARS \
-                      else "..." + self._live_text[-(self.TEXT_MAX_CHARS - 3):]
-            self._canvas.create_text(
-                cx, cy + 135, text=display,
-                fill="#CCCCCC", font=("Consolas", 12),
-                width=self.CANVAS_SIZE - 40, anchor="n",
+            display = self._live_text[-self.TEXT_MAX_CHARS:]
+            text_w = min(len(display) * 8, self.CANVAS_SIZE - 40)
+            panel_x1 = cx - text_w / 2 - 16
+            panel_x2 = cx + text_w / 2 + 16
+            panel_y1 = cy + 112
+            panel_y2 = cy + 162
+
+            # Dark opaque backdrop panel with rounded corners
+            self._rounded_rect(
+                panel_x1, panel_y1, panel_x2, panel_y2, r=10,
+                fill="#0C0C0C", outline="#222222", width=1,
+            )
+
+            # Shadow + foreground text on the panel
+            self._shadow_text(
+                cx, cy + 137, text=display,
+                fill="#EEEEEE", shadow="#020202",
+                font=("Consolas", 14, "bold"),
             )
 
     def _draw_palladium_ring(self, cx, cy, r_in, r_out, color, segments):
@@ -253,11 +299,9 @@ class ArcReactorUI:
         self._status_text = status
 
     def set_core_text(self, text: str):
-        """Text displayed inside the reactor core (timer during recording)."""
         self._core_text = text
 
     def set_live_text(self, text: str):
-        """Live transcription words shown below the reactor ring."""
         self._live_text = text
 
     def show(self):
