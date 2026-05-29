@@ -41,15 +41,11 @@ class VoiceTypingApp:
 
         self._is_recording = False
         self._running = False
-
         self._audio_buffer: list = []
 
     # ------------------------------------------------------------------
     # Setup
     # ------------------------------------------------------------------
-
-    def _validate_config(self) -> bool:
-        return True
 
     def _initialize_components(self) -> None:
         print("Initializing Voice Typing (Local Whisper Mode)...")
@@ -64,9 +60,6 @@ class VoiceTypingApp:
             compute_type=config.whisper_compute_type,
             vad_threshold=config.vad_threshold,
         )
-        self._transcriber.set_transcription_callback(self._on_transcription)
-        self._transcriber.set_status_callback(self._on_status)
-
         threading.Thread(target=self._transcriber.load_model, daemon=True).start()
 
         self._hotkey_handler = HotkeyHandler()
@@ -76,29 +69,6 @@ class VoiceTypingApp:
         self._text_injector = TextInjector(typing_delay=config.typing_delay)
         self._ui = ArcReactorUI()
         self._tray = TrayApp()
-
-    # ------------------------------------------------------------------
-    # Callbacks
-    # ------------------------------------------------------------------
-
-    def _on_transcription(self, text: str) -> None:
-        if not text:
-            return
-
-        print(f"[App] Typed: {text}")
-
-        if self._ui:
-            preview = f"OK {text[:40]}..." if len(text) > 40 else f"OK {text}"
-            self._ui.set_status(preview)
-
-        processed = VoiceCommands.process_text(text)
-        if self._text_injector:
-            self._text_injector.type_text(processed)
-
-    def _on_status(self, status: str) -> None:
-        print(f"Status: {status}")
-        if self._ui:
-            self._ui.set_status(status)
 
     # ------------------------------------------------------------------
     # Recording
@@ -117,12 +87,10 @@ class VoiceTypingApp:
         print("\n[REC] STARTED — speak now (double-space to stop)")
         self._is_recording = True
         self._audio_buffer = []
-        self._recording_start_time = time.time()
+        start_time = time.time()
 
         if self._ui:
             self._ui.set_recording(True)
-            self._ui.set_status("Listening")
-            self._ui.set_live_text("")
             self._ui.set_core_text("REC")
         if self._tray:
             self._tray.set_recording(True)
@@ -134,42 +102,16 @@ class VoiceTypingApp:
 
         self._audio_capture.start(on_audio)
 
-        # Background thread: timer in core + periodic live transcription
-        def live_display():
-            last_transcribe = time.time()
+        # Timer in core
+        def timer_loop():
             while self._is_recording:
-                elapsed = int(time.time() - self._recording_start_time)
+                elapsed = int(time.time() - start_time)
                 mins, secs = divmod(elapsed, 60)
-                timer = f"{mins}:{secs:02d}"
-
                 if self._ui:
-                    # Timer inside the reactor core
-                    self._ui.set_core_text(timer)
-                    self._ui.set_status("Listening")
+                    self._ui.set_core_text(f"{mins}:{secs:02d}")
+                time.sleep(0.25)
 
-                # Every ~3 seconds: transcribe buffer so far, show live words
-                if elapsed > 2 and time.time() - last_transcribe > 3:
-                    last_transcribe = time.time()
-                    try:
-                        buf_copy = list(self._audio_buffer)
-                        if len(buf_copy) < 64:
-                            continue
-                        audio_data = b"".join(buf_copy)
-                        interim = self._transcriber.transcribe(audio_data)
-                        if interim and self._ui and self._is_recording:
-                            # Clean: strip trailing incomplete words/fragments
-                            clean = interim.strip()
-                            # Remove trailing incomplete word (last word after space)
-                            if " " in clean:
-                                # Only show complete sentences/phrases
-                                clean = " ".join(clean.split(" ")[:-1]) if len(clean.split(" ")) > 3 else clean
-                            self._ui.set_live_text(clean)
-                    except Exception:
-                        pass
-
-                time.sleep(0.3)
-
-        threading.Thread(target=live_display, daemon=True).start()
+        threading.Thread(target=timer_loop, daemon=True).start()
 
     def _stop_recording(self) -> None:
         if not self._is_recording:
@@ -183,9 +125,7 @@ class VoiceTypingApp:
 
         if self._ui:
             self._ui.set_core_text("...")
-            self._ui.set_live_text("")
 
-        # Save audio + transcribe
         self._save_and_transcribe()
 
     # ------------------------------------------------------------------
@@ -193,11 +133,9 @@ class VoiceTypingApp:
     # ------------------------------------------------------------------
 
     def _save_and_transcribe(self) -> None:
-        """Save WAV file then transcribe in background."""
         if not self._audio_buffer:
             return
 
-        # Save WAV files
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         archive_wav = RECORDINGS_DIR / f"rec_{timestamp}.wav"
         legacy_wav = Path("last_recording.wav")
@@ -210,7 +148,6 @@ class VoiceTypingApp:
                     wf.setframerate(16000)
                     for chunk in self._audio_buffer:
                         wf.writeframes(chunk)
-
             duration = sum(len(c) for c in self._audio_buffer) / (16000 * 2)
             print(f"[Save] {archive_wav.name} ({duration:.1f}s)")
         except Exception as e:
@@ -218,40 +155,40 @@ class VoiceTypingApp:
 
         if self._ui:
             self._ui.set_recording(False)
-            self._ui.set_status("Transcribing...")
         if self._tray:
             self._tray.set_recording(False)
             self._tray.set_status("processing")
 
-        audio_data = self._transcriber.audio_chunks_to_bytes(self._audio_buffer)
+        audio_data = b"".join(self._audio_buffer)
 
         def finish():
             text = self._transcriber.transcribe(audio_data)
-
-            # Save transcription alongside the audio
             if text:
                 txt_path = archive_wav.with_suffix(".txt")
                 try:
                     txt_path.write_text(text, encoding="utf-8")
                 except Exception:
                     pass
-
-                self._on_transcription(text)
+                self._type_text(text)
 
             if self._tray:
                 self._tray.set_status("idle")
             if self._ui:
-                self._ui.set_status("Ready")
-                self._ui.hide_after_delay(2000)
+                self._ui.hide_after_delay(1000)
 
         threading.Thread(target=finish, daemon=True).start()
 
+    def _type_text(self, text: str) -> None:
+        print(f"[App] Typed: {text}")
+        processed = VoiceCommands.process_text(text)
+        if self._text_injector:
+            self._text_injector.type_text(processed)
+
     # ------------------------------------------------------------------
-    # Retry (triple-space + tray)
+    # Retry
     # ------------------------------------------------------------------
 
     def _retry_last(self) -> None:
-        """Re-transcribe last recording, type result, auto-hide UI."""
         if self._is_recording:
             print("[Retry] Busy — recording in progress")
             return
@@ -260,30 +197,23 @@ class VoiceTypingApp:
         if not wav_path.exists():
             print("[Retry] Nothing to retry — record first")
             if self._ui:
-                self._ui.set_status("Nothing to retry")
+                self._ui.show()
+                self._ui.set_core_text("N/A")
                 self._ui.hide_after_delay(1500)
             return
 
-        print(f"[Retry] Re-transcribing...")
+        print("[Retry] Re-transcribing...")
         if self._ui:
-            self._ui.set_status("Retrying...")
             self._ui.show()
 
         def do_retry():
             text = self._transcriber.transcribe_wav_file(str(wav_path))
             if text:
-                processed = VoiceCommands.process_text(text)
-                if self._text_injector:
-                    self._text_injector.type_text(processed)
-                if self._ui:
-                    preview = f"OK {text[:40]}..." if len(text) > 40 else f"OK {text}"
-                    self._ui.set_status(preview)
-                    self._ui.hide_after_delay(2000)
+                self._type_text(text)
             else:
                 print("[Retry] No speech detected")
-                if self._ui:
-                    self._ui.set_status("Retry failed")
-                    self._ui.hide_after_delay(2000)
+            if self._ui:
+                self._ui.hide_after_delay(1000)
 
         threading.Thread(target=do_retry, daemon=True).start()
 
@@ -296,9 +226,6 @@ class VoiceTypingApp:
         self.stop()
 
     def start(self) -> None:
-        if not self._validate_config():
-            sys.exit(1)
-
         self._initialize_components()
         self._running = True
 
