@@ -8,7 +8,7 @@ import threading
 from typing import Callable, Optional, List, Dict, Any
 import pyaudio
 
-# Audio format constants (required by Gemini Live API)
+# Audio format constants (PCM 16-bit 16kHz mono)
 RATE = 16000       # 16kHz sample rate
 CHANNELS = 1       # Mono
 FORMAT = pyaudio.paInt16  # 16-bit PCM
@@ -27,7 +27,7 @@ class AudioCapture:
         """
         self._pyaudio: Optional[pyaudio.PyAudio] = None
         self._stream: Optional[pyaudio.Stream] = None
-        
+
         # Smart device selection if not specified
         if device_index is None:
             self._initialize_pyaudio()
@@ -38,6 +38,8 @@ class AudioCapture:
             else:
                 self._device_index = None
                 print("Warning: No microphone found, using system default")
+            # Clean up temporary PyAudio instance used for device detection
+            self._cleanup_pyaudio()
         else:
             self._device_index = device_index
             

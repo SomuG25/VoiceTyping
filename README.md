@@ -1,348 +1,178 @@
 <div align="center">
-
-# 🎤 Gemini AI Voice Typing
-
-**Transform your voice into text anywhere on Windows with a single hotkey**
-
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Platform](https://img. shields.io/badge/platform-Windows%2011-brightgreen)](https://www.microsoft.com/windows)
-[![API](https://img.shields.io/badge/API-Google%20Gemini-orange)](https://ai.google.dev/)
-[![Stars](https://img.shields.io/github/stars/SomuG25/VoiceTyping?style=social)](https://github.com/SomuG25/VoiceTyping/stargazers)
-
-<p align="center">
-  <img src="https://readme-typing-svg.herokuapp.com?font=Fira+Code&weight=600&size=22&pause=1000&color=00D4FF&center=true&vCenter=true&width=600&lines=Iron+Man+Arc+Reactor+UI;Ultra-Sensitive+Voice+Detection;Powered+by+Google+Gemini+AI" alt="Typing SVG" />
-</p>
-
-[Features](#-features) •
-[Demo](#-demo) •
-[Installation](#-installation) •
-[Usage](#-usage) •  
-[Configuration](#-configuration) •
-[Contributing](#-contributing)
-
+  <img src="https://readme-typing-svg.herokuapp.com?font=Orbitron&size=32&duration=3000&pause=1000&color=00F2FF&center=true&vCenter=true&width=500&lines=VOICE+TYPING;Speak.+Type.+Done." alt="Voice Typing" />
 </div>
 
----
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="Python" />
+  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" />
+  <img src="https://img.shields.io/badge/platform-Windows%2011-brightgreen" alt="Platform" />
+  <img src="https://img.shields.io/badge/offline-100%25-brightgreen" alt="Offline" />
+</p>
 
-## ✨ Features
-
-<table>
-<tr>
-<td width="50%">
-
-### 🎯 Core Features
-- **System-Wide Hotkey** - Press `Win+H` anywhere
-- **Gemini AI Powered** - High-accuracy transcription
-- **Arc Reactor UI** - Iron Man-inspired visualization
-- **Auto-Type** - Text appears where cursor is
-- **Universal** - Works in all applications
-
-</td>
-<td width="50%">
-
-### 🚀 Advanced
-- **Dual Color Modes** - Cyan listening, Amber processing
-- **Ultra-Sensitive** - Responds to normal speech
-- **Batch Transcription** - Higher accuracy mode
-- **Real-Time Animation** - 60 FPS reactor pulse
-- **Free Tier Available** - Use Google's free API
-
-</td>
-</tr>
-</table>
+<p align="center">
+  <b>Voice Typing</b> turns your speech into text in any window — <b>completely offline</b>.
+  <br>No API keys. No internet. Just double-tap Space and talk.
+</p>
 
 ---
 
-## 🎬 Demo
+## How It Works
 
-### Arc Reactor UI in Action
-
-| Listening Mode (Cyan) | Processing Mode (Amber) |
-|:---:|:---:|
-| <img src="https://via.placeholder.com/300x300/007AFF/FFFFFF?text=Listening" width="280"/> | <img src="https://via.placeholder.com/300x300/FFD700/000000?text=Processing" width="280"/> |
-| Rings rotate slowly, core pulses with voice | Rings spin faster, radar scanner active |
-
-> **Note**: Replace placeholder images with actual screenshots of your Arc Reactor UI
-
-### How It Works
-```
-1. Press Win+H anywhere  →  2. Speak naturally  →  3. Text appears instantly
-   🔵 Hotkey             🎤 Voice capture      ⌨️ Auto-typed
-```
+1. **Double-tap Space** — microphone opens. The Arc Reactor UI appears.
+2. **Speak** — your voice is recorded locally.
+3. **Double-tap Space again** — recording stops. faster-whisper transcribes your speech and types it wherever your cursor is.
+4. **Triple-tap Space** — retype the last recording (useful if something went wrong).
 
 ---
 
-## 📋 Prerequisites
+## Installation
 
-Before you begin, ensure you have:
-
-- ✅ **Windows 11** (or Windows 10 with compatible drivers)
-- ✅ **Python 3.8+** ([Download here](https://www.python.org/downloads/))
-- ✅ **Microphone** (built-in or external)
-- ✅ **Google Gemini API Key** ([Get free key](https://aistudio.google.com/app/apikey))
-
----
-
-## 🚀 Installation
-
-### Quick Start (5 minutes)
-
+### 1. Clone
 ```bash
-# 1️⃣ Clone the repository
 git clone https://github.com/SomuG25/VoiceTyping.git
 cd VoiceTyping
+```
 
-# 2️⃣ Install dependencies
+### 2. Create a virtual environment
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+### 3. Install dependencies
+```bash
 pip install -r requirements.txt
-
-# 3️⃣ Configure your API key
-copy .env.example .env
-# Edit .env and add your GEMINI_API_KEY
-
-# 4️⃣ Run the application
-python main.py
 ```
 
-### Get Your Free API Key
+> **Note:** The first run will download the Whisper model (~400 MB) to your local cache. This only happens once.
 
-1. Visit [Google AI Studio](https://aistudio.google.com/app/apikey)
-2. Click **"Create API Key"**
-3. Copy the key and paste it into your `.env` file:
-
-```env
-GEMINI_API_KEY=your_api_key_here
-```
-
----
-
-## 🎮 Usage
-
-### Starting the Application
-
+### 4. Run
 ```bash
 python main.py
 ```
 
-You'll see:
-```
-==================================================
-  Voice Typing - Batch Mode
-  Powered by Google Gemini API
-==================================================
+The app runs silently in your system tray. Double-tap Space to record.
 
-Voice Typing started! (Batch Mode)
-Press WIN+H to start recording
-The app is running in the system tray.
-```
-
-### Using Voice Typing
-
-<table>
-<tr>
-<td width="5%">1️⃣</td>
-<td><strong>Click</strong> where you want to type (browser, Word, Notepad, etc.)</td>
-</tr>
-<tr>
-<td>2️⃣</td>
-<td><strong>Press Win+H</strong> to start recording</td>
-</tr>
-<tr>
-<td>3️⃣</td>
-<td><strong>Speak naturally</strong> - Arc Reactor UI appears and pulses</td>
-</tr>
-<tr>
-<td>4️⃣</td>
-<td><strong>Press Win+H again</strong> to stop</td>
-</tr>
-<tr>
-<td>5️⃣</td>
-<td><strong>Wait 2-3 seconds</strong> - text appears automatically!</td>
-</tr>
-</table>
-
-### Arc Reactor UI Guide
-
-| Mode | Color | Animation | Meaning |
-|------|-------|-----------|---------|
-| 🎤 **Listening** | Electric Blue/Cyan | Rings rotate slowly, core pulses with voice | Recording your speech |
-| ⚙️ **Processing** | Gold/Amber | Rings spin faster, radar scanner active | Analyzing & transcribing |
+### Optional: Launch on Startup
+Run `create_shortcut.ps1` in PowerShell to add Voice Typing to your Windows startup folder.
 
 ---
 
-## 🔧 Configuration
+## Features
 
-### Change Hotkey
+| | |
+|---|---|
+| **Double-tap Space** | Open microphone — no looking for hotkeys |
+| **Triple-tap Space** | Retry the last transcription |
+| **100% Offline** | Local faster-whisper + Silero VAD on your PC |
+| **Arc Reactor UI** | Iron Man-style overlay with live amplitude |
+| **Recording Archive** | Every recording saved to `recordings/` with matching `.txt` |
+| **System Tray** | Right-click for start/stop/retry/exit |
 
-Edit `config.json`:
+---
+
+## Model Selection
+
+Configure in `config.json`:
+
+| Setting | Default | Options |
+|---------|---------|---------|
+| `whisper_model` | `base` | `tiny`, `base`, `small`, `medium`, `large-v3` |
+| `whisper_device` | `cpu` | `cpu`, `cuda`, `auto` |
+| `whisper_compute_type` | `int8` | `int8`, `float16`, `float32`, `auto` |
+| `vad_threshold` | `0.5` | `0.0` – `1.0` (lower = more sensitive) |
+
+- **tiny** — fastest, least accurate (1 GB RAM)
+- **base** — good balance, ~400 MB model
+- **small** — more accurate, slower on CPU
+
+For GPU acceleration, set `whisper_device` to `"cuda"` and `whisper_compute_type` to `"float16"`.
+
+---
+
+## Configuration
+
+Edit `config.json` to customize:
+
 ```json
 {
-    "hotkey": "ctrl+shift+v",  // Your custom hotkey
-    "audio_device": null,
-    "typing_delay": 0.01
-}
-```
-
-**Supported modifiers**: `ctrl`, `shift`, `alt`, `win`
-
-### Select Specific Microphone
-
-```bash
-# List available devices
-python audio_capture.py
-
-# Update config.json with device index
-{
-    "audio_device": 2  // Your microphone index
-}
-```
-
-### Customize Typing Speed
-
-```json
-{
-    "typing_delay": 0.005  // Faster (0.005-0.02)
+  "audio_device": null,
+  "audio_device_name": "Realtek",
+  "overlay_enabled": true,
+  "typing_delay": 0.01,
+  "whisper_model": "base",
+  "whisper_device": "cpu",
+  "whisper_compute_type": "int8",
+  "vad_threshold": 0.5
 }
 ```
 
 ---
 
-## 📊 Technical Details
+## Troubleshooting
 
-### Recording Limits
--**Format**: 16kHz, 16-bit mono WAV
-- **Max Duration**: ~10 minutes per recording
-- **File Size**: 20MB limit (Google Gemini API)
-- **Sensitivity**: RMS / 500 (ultra-sensitive)
+<details>
+<summary><b>No microphone detected</b></summary>
 
-### Tech Stack
+Run `python audio_capture.py` to see all detected devices. Set `audio_device` in `config.json` to the correct index. The app auto-prioritizes Realtek/physical mics over virtual devices.
+</details>
+
+<details>
+<summary><b>Whisper model fails to download</b></summary>
+
+Set the environment variable `HF_ENDPOINT=https://hf-mirror.com` if you are behind a firewall. Or manually download the model from HuggingFace to `~/.cache/huggingface/hub/`.
+</details>
+
+<details>
+<summary><b>Transcription is slow</b></summary>
+
+Use `"tiny"` or `"base"` model. On CPU, `small` and above can take several seconds. If you have an NVIDIA GPU, set `whisper_device` to `"cuda"`.
+</details>
+
+<details>
+<summary><b>Text doesn't appear after stopping</b></summary>
+
+Make sure your cursor is in a text field. The app pastes via Ctrl+V. If the target app blocks paste, try a different window.
+</details>
+
+<details>
+<summary><b>Double-tap Space not detected</b></summary>
+
+Run the app as Administrator. Some applications capture keyboard input at a lower level. You can also start/stop from the system tray menu.
+</details>
+
+---
+
+## Tech Stack
+
+| Component | Library |
+|-----------|---------|
+| Transcription | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2) |
+| VAD (voice detection) | Silero VAD (built into faster-whisper) |
+| Audio capture | PyAudio |
+| Keyboard detection | [keyboard](https://github.com/boppreh/keyboard) |
+| Text injection | pyautogui + pyperclip |
+| System tray | pystray + Pillow |
+| UI overlay | Tkinter + NumPy |
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.
+
+---
 
 <p align="center">
-<img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white"/>
-<img src="https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=google&logoColor=white"/>
-<img src="https://img.shields.io/badge/Tkinter-0078D4?style=for-the-badge&logo=python&logoColor=white"/>
-<img src="https://img.shields.io/badge/NumPy-013243?style=for-the-badge&logo=numpy&logoColor=white"/>
-<img src="https://img.shields.io/badge/PyAudio-FF6B6B?style=for-the-badge&logo=audio&logoColor=white"/>
+  <sub>Built with faster-whisper · Iron Man vibes · Zero internet required</sub>
 </p>
-
-### Dependencies
-```
-google-genai    - Gemini AI API client
-pyaudio         - Audio capture
-numpy           - Audio processing
-keyboard        - Global hotkey detection
-pyperclip       - Clipboard management
-pystray         - System tray icon
-python-dotenv   - Environment variables
-```
-
----
-
-## 🛠️ Troubleshooting
-
-<details>
-<summary><b>❌ "No API key found!"</b></summary>
-
-- Ensure you created `.env` file (not `.env.example`)
-- Check `GEMINI_API_KEY` is set correctly
-- No spaces around the `=` sign
-</details>
-
-<details>
-<summary><b>🎤 Microphone not detected</b></summary>
-
-- Run `python audio_capture.py` to list devices
-- Specify device index in `config.json`
-- Check Windows Privacy → Microphone permissions
-</details>
-
-<details>
-<summary><b>🖼️ UI not appearing</b></summary>
-
-- Check antivirus isn't blocking Python
-- Try running as administrator
-- Verify Tkinter: `python -c "import tkinter"`
-</details>
-
-<details>
-<summary><b>⌨️ Hotkey not working</b></summary>
-
-- Check another app isn't using `Win+H`
-- Try different combination in `config.json`
-- Some combinations are reserved by Windows
-</details>
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Here's how:
-
-1. 🍴 **Fork** the repository
-2. 🎋 **Create** a feature branch (`git checkout -b feature/AmazingFeature`)
-3. ✍️ **Commit** your changes (`git commit -m 'Add AmazingFeature'`)
-4. 📤 **Push** to the branch (`git push origin feature/AmazingFeature`)
-5. 🎉 **Open** a Pull Request
-
----
-
-## 📜 License
-
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
-
----
-
-## � Acknowledgments
-
-- **Google Gemini** - Powering accurate AI transcription
-- **Iron Man/Marvel** - Arc Reactor design inspiration
-- **Open Source Community** - Excellent Python libraries
-
----
-
-## 🎯 Roadmap
-
-- [ ] Linux and macOS support
-- [ ] Multiple language transcription
-- [ ] Custom wake words
-- [ ] Voice commands (punctuation, formatting)
-- [ ] Offline mode with local models
-- [ ] Browser extension
-
----
-
-## 💬 Support
-
-<div align="center">
-
-**Having issues? Found a bug?**
-
-[![GitHub Issues](https://img.shields.io/github/issues/SomuG25/VoiceTyping)](https://github.com/SomuG25/VoiceTyping/issues)
-[![GitHub Discussions](https://img.shields.io/badge/Discussions-Join-brightgreen)](https://github.com/SomuG25/VoiceTyping/discussions)
-
-[Open an Issue](https://github.com/SomuG25/VoiceTyping/issues/new) • [Ask a Question](https://github.com/SomuG25/VoiceTyping/discussions)
-
-</div>
-
----
-
-## � Stats
-
-<div align="center">
-
-![GitHub repo size](https://img.shields.io/github/repo-size/SomuG25/VoiceTyping)
-![GitHub code size](https://img.shields.io/github/languages/code-size/SomuG25/VoiceTyping)
-![GitHub last commit](https://img.shields.io/github/last-commit/SomuG25/VoiceTyping)
-![GitHub commit activity](https://img.shields.io/github/commit-activity/m/SomuG25/VoiceTyping)
-
-</div>
-
----
-
-<div align="center">
-
-### ⭐ Star this repo if you find it useful!
-
-**Made with ❤️ using Google Gemini AI**
-
-</div>

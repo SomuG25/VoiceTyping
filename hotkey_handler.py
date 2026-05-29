@@ -1,171 +1,91 @@
 """
-Global hotkey handler for Voice Typing application.
+Space-tap triggers for Voice Typing.
+No OS conflicts — just tap space.
 
-Supports multiple simultaneous hotkeys, each with its own callback.
-Uses pynput for system-wide key detection.
-
-Default hotkeys:
-  win+h           → toggle recording
-  ctrl+shift+r    → retry last recording
+Double-tap Space  → toggle recording
+Triple-tap Space  → retry last recording
 """
 
+import time
 import threading
-from typing import Callable, Dict, Optional, Set
-from pynput import keyboard
+from typing import Callable, Optional
+
+import keyboard
+
+
+DOUBLE_WINDOW = 0.35   # max gap for double-tap
+TRIPLE_WINDOW = 0.45   # max gap for third tap
 
 
 class HotkeyHandler:
-    """Handles multiple global hotkeys with independent callbacks."""
+    """Detects double-tap and triple-tap Space. Zero OS conflicts.
+
+    Space still works normally for typing — only rapid multi-taps trigger actions.
+    """
 
     def __init__(self):
-        """Initialize the hotkey handler (no hotkeys registered yet)."""
-        self._listener: Optional[keyboard.Listener] = None
-        self._pressed_keys: Set[str] = set()
         self._running = False
-        # Map of frozenset(required_keys) → callback
-        self._hotkeys: Dict[frozenset, Callable[[], None]] = {}
+        self._on_toggle: Optional[Callable[[], None]] = None
+        self._on_retry: Optional[Callable[[], None]] = None
+        self._pending: Optional[threading.Timer] = None
+        self._last_tap = 0.0
+        self._tap_count = 0
 
-    # -------------------------------------------------------------------------
-    # Registration
-    # -------------------------------------------------------------------------
-
-    def register(self, hotkey: str, callback: Callable[[], None]) -> None:
-        """Register a hotkey and its callback.
-
-        Args:
-            hotkey: Hotkey string like "win+h", "ctrl+shift+r"
-            callback: Function to call when the hotkey is pressed
-        """
-        keys = self._parse_hotkey(hotkey)
-        self._hotkeys[frozenset(keys)] = callback
-        print(f"[Hotkey] Registered: {hotkey.lower()}")
-
-    def unregister(self, hotkey: str) -> None:
-        """Unregister a hotkey."""
-        keys = frozenset(self._parse_hotkey(hotkey))
-        self._hotkeys.pop(keys, None)
-
-    # -------------------------------------------------------------------------
-    # Lifecycle
-    # -------------------------------------------------------------------------
+    def register(self, action: str, callback: Callable[[], None]) -> None:
+        if action == "toggle":
+            self._on_toggle = callback
+        elif action == "retry":
+            self._on_retry = callback
 
     def start(self) -> None:
-        """Start listening for all registered hotkeys."""
         if self._running:
             return
-
         self._running = True
-        self._pressed_keys.clear()
-
-        self._listener = keyboard.Listener(
-            on_press=self._on_press,
-            on_release=self._on_release,
-        )
-        self._listener.start()
+        keyboard.on_press_key("space", self._on_space, suppress=False)
+        print("[Hotkey] Double-Space = record  |  Triple-Space = retry")
 
     def stop(self) -> None:
-        """Stop listening."""
         self._running = False
-        if self._listener:
-            self._listener.stop()
-            self._listener = None
-        self._pressed_keys.clear()
+        self._cancel_pending()
+        keyboard.unhook_all()
 
-    # -------------------------------------------------------------------------
-    # Event handlers
-    # -------------------------------------------------------------------------
+    def _cancel_pending(self):
+        if self._pending:
+            self._pending.cancel()
+            self._pending = None
 
-    def _on_press(self, key) -> None:
-        """Track pressed keys and fire callbacks when combinations match."""
-        key_name = self._normalize_key(key)
-        if not key_name:
+    def _on_space(self, event) -> None:
+        now = time.time()
+        gap = now - self._last_tap
+        self._last_tap = now
+
+        if gap > DOUBLE_WINDOW:
+            # Fresh start — first tap of a new sequence
+            self._cancel_pending()
+            self._tap_count = 1
             return
 
-        self._pressed_keys.add(key_name)
+        # Fast tap (within window)
+        self._tap_count += 1
 
-        # Check every registered hotkey
-        for required, callback in self._hotkeys.items():
-            if required.issubset(self._pressed_keys):
-                # Fire callback in a daemon thread to avoid blocking the listener
-                threading.Thread(target=callback, daemon=True).start()
-                # Clear pressed keys to prevent repeated triggers
-                self._pressed_keys.clear()
-                return
+        if self._tap_count == 2:
+            # Could be double-tap or start of triple-tap
+            # Wait to see if third tap arrives
+            self._cancel_pending()
+            self._pending = threading.Timer(TRIPLE_WINDOW, self._fire_toggle)
+            self._pending.daemon = True
+            self._pending.start()
 
-    def _on_release(self, key) -> None:
-        """Remove released key from tracking set."""
-        key_name = self._normalize_key(key)
-        if key_name:
-            self._pressed_keys.discard(key_name)
+        elif self._tap_count == 3:
+            # Triple-tap confirmed
+            self._cancel_pending()
+            self._tap_count = 0
+            if self._on_retry:
+                threading.Thread(target=self._on_retry, daemon=True).start()
 
-    # -------------------------------------------------------------------------
-    # Key normalization helpers
-    # -------------------------------------------------------------------------
-
-    def _parse_hotkey(self, hotkey: str) -> Set[str]:
-        """Parse 'win+h' or 'ctrl+shift+r' into a set of normalized key names."""
-        parts = hotkey.lower().replace(" ", "").split("+")
-        keys: Set[str] = set()
-        for part in parts:
-            if part in ("win", "cmd", "super"):
-                keys.add("cmd")
-            elif part in ("ctrl", "control"):
-                keys.add("ctrl")
-            elif part in ("alt", "option"):
-                keys.add("alt")
-            elif part == "shift":
-                keys.add("shift")
-            else:
-                keys.add(part)
-        return keys
-
-    def _normalize_key(self, key) -> Optional[str]:
-        """Map a pynput key object to a normalized string."""
-        try:
-            if key in (keyboard.Key.cmd, keyboard.Key.cmd_l, keyboard.Key.cmd_r):
-                return "cmd"
-            if key in (keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
-                return "ctrl"
-            if key in (keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r):
-                return "alt"
-            if key in (keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r):
-                return "shift"
-            if hasattr(key, "char") and key.char:
-                return key.char.lower()
-            if hasattr(key, "name"):
-                return key.name.lower()
-            return None
-        except Exception:
-            return None
-
-
-# -------------------------------------------------------------------------
-# Standalone test
-# -------------------------------------------------------------------------
-
-def test_hotkeys():
-    handler = HotkeyHandler()
-    count = [0]
-
-    def on_toggle():
-        count[0] += 1
-        print(f"[Test] Win+H pressed (count={count[0]})")
-        if count[0] >= 3:
-            handler.stop()
-
-    def on_retry():
-        print("[Test] Ctrl+Shift+R pressed — retry!")
-
-    handler.register("win+h", on_toggle)
-    handler.register("ctrl+shift+r", on_retry)
-    handler.start()
-
-    print("Press Win+H (3×) to exit, Ctrl+Shift+R to test retry")
-    try:
-        handler._listener.join()
-    except KeyboardInterrupt:
-        handler.stop()
-
-
-if __name__ == "__main__":
-    test_hotkeys()
+    def _fire_toggle(self):
+        """Timer expired — no third tap, so double-tap = toggle."""
+        self._pending = None
+        self._tap_count = 0
+        if self._on_toggle:
+            self._on_toggle()

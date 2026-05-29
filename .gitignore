@@ -46,6 +46,10 @@ last_recording.wav
 debug_*.py
 *.log
 
+# Recordings folder (user voice data — privacy)
+recordings/
+*.wav
+
 # Old UI files (deprecated)
 glass_orb_ui.py
 waveform_ui.py

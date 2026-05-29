@@ -15,18 +15,16 @@ load_dotenv(dotenv_path=env_path)
 
 # Default configuration
 DEFAULT_CONFIG = {
-    "api_key": "",
-    "hotkey": "win+h",
-    "retry_hotkey": "win+f4",
     "audio_device": None,
     "audio_device_name": "Realtek",
-    "transcription_model": "gemini-live-2.5-flash-native-audio",
     "last_recording_path": "last_recording.wav",
     "overlay_enabled": True,
     "auto_start": False,
     "typing_delay": 0.01,
-    "reconnect_max_attempts": 3,
-    "session_max_minutes": 9,
+    "whisper_model": "base",
+    "whisper_device": "cpu",
+    "whisper_compute_type": "int8",
+    "vad_threshold": 0.5,
 }
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
@@ -49,48 +47,17 @@ class Config:
             except (json.JSONDecodeError, IOError) as e:
                 print(f"Warning: Could not load config.json: {e}")
 
-        # Environment variable always takes priority
-        env_api_key = os.environ.get("GEMINI_API_KEY")
-        if env_api_key:
-            self._config["api_key"] = env_api_key
-
     def save(self) -> None:
         """Save current configuration to config.json."""
-        save_config = {k: v for k, v in self._config.items() if k != "api_key"}
         try:
             with open(CONFIG_PATH, "w") as f:
-                json.dump(save_config, f, indent=4)
+                json.dump(self._config, f, indent=4)
         except IOError as e:
             print(f"Error: Could not save config.json: {e}")
 
     # -------------------------------------------------------------------------
     # Properties
     # -------------------------------------------------------------------------
-
-    @property
-    def api_key(self) -> str:
-        return self._config.get("api_key", "")
-
-    @api_key.setter
-    def api_key(self, value: str) -> None:
-        self._config["api_key"] = value
-
-    @property
-    def hotkey(self) -> str:
-        return self._config.get("hotkey", "win+h")
-
-    @hotkey.setter
-    def hotkey(self, value: str) -> None:
-        self._config["hotkey"] = value
-
-    @property
-    def retry_hotkey(self) -> str:
-        """Hotkey to re-transcribe last_recording.wav (default: win+f4)."""
-        return self._config.get("retry_hotkey", "win+f4")
-
-    @retry_hotkey.setter
-    def retry_hotkey(self, value: str) -> None:
-        self._config["retry_hotkey"] = value
 
     @property
     def audio_device(self) -> Optional[int]:
@@ -117,14 +84,6 @@ class Config:
         self._config["auto_start"] = value
 
     @property
-    def transcription_model(self) -> str:
-        return self._config.get("transcription_model", "gemini-3.1-flash-live-preview")
-
-    @transcription_model.setter
-    def transcription_model(self, value: str) -> None:
-        self._config["transcription_model"] = value
-
-    @property
     def last_recording_path(self) -> str:
         """Path to save the last recording WAV for retry."""
         return self._config.get("last_recording_path", "last_recording.wav")
@@ -142,12 +101,40 @@ class Config:
         self._config["typing_delay"] = value
 
     @property
-    def reconnect_max_attempts(self) -> int:
-        return self._config.get("reconnect_max_attempts", 3)
+    def whisper_model(self) -> str:
+        """faster-whisper model size: tiny, base, small, medium, large-v3."""
+        return self._config.get("whisper_model", "base")
+
+    @whisper_model.setter
+    def whisper_model(self, value: str) -> None:
+        self._config["whisper_model"] = value
 
     @property
-    def session_max_minutes(self) -> int:
-        return self._config.get("session_max_minutes", 9)
+    def whisper_device(self) -> str:
+        """Device for Whisper inference: auto, cpu, cuda."""
+        return self._config.get("whisper_device", "auto")
+
+    @whisper_device.setter
+    def whisper_device(self, value: str) -> None:
+        self._config["whisper_device"] = value
+
+    @property
+    def whisper_compute_type(self) -> str:
+        """Compute type: auto, int8, float16, float32."""
+        return self._config.get("whisper_compute_type", "auto")
+
+    @whisper_compute_type.setter
+    def whisper_compute_type(self, value: str) -> None:
+        self._config["whisper_compute_type"] = value
+
+    @property
+    def vad_threshold(self) -> float:
+        """Silero VAD speech probability threshold (0.0-1.0)."""
+        return self._config.get("vad_threshold", 0.5)
+
+    @vad_threshold.setter
+    def vad_threshold(self, value: float) -> None:
+        self._config["vad_threshold"] = value
 
 
 # Global config instance

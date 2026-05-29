@@ -1,30 +1,26 @@
 ' Voice Typing - Hidden Launcher (No Console Window)
-' This VBS script runs the Python app silently in the background
-' Perfect for Windows startup
+' This VBS script runs the Python app silently in the background using the venv Python.
 
-Set WshShell = CreateObject("WScript.Shell")
-WshShell.CurrentDirectory = CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName)
+Set objFSO = CreateObject("Scripting.FileSystemObject")
+scriptDir = objFSO.GetParentFolderName(WScript.ScriptFullName)
 
-' Get Python path
-Set objExec = WshShell.Exec("where pythonw")
-pythonPath = ""
-If Not objExec.StdOut.AtEndOfStream Then
-    pythonPath = Trim(objExec.StdOut.ReadLine())
-End If
+' Use the venv Python (where all deps are installed)
+pythonExe = scriptDir & "\.venv\Scripts\pythonw.exe"
 
-' Fallback to python if pythonw not found
-If pythonPath = "" Then
-    Set objExec = WshShell.Exec("where python")
+If Not objFSO.FileExists(pythonExe) Then
+    ' Fallback: try system pythonw
+    Set objExec = CreateObject("WScript.Shell").Exec("where pythonw")
+    pythonExe = ""
     If Not objExec.StdOut.AtEndOfStream Then
-        pythonPath = Trim(objExec.StdOut.ReadLine())
+        pythonExe = Trim(objExec.StdOut.ReadLine())
+    End If
+    If pythonExe = "" Then
+        MsgBox "Python not found! Run: .venv\Scripts\python -m pip install -r requirements.txt", vbCritical, "Voice Typing Error"
+        WScript.Quit 1
     End If
 End If
 
-If pythonPath = "" Then
-    MsgBox "Python not found! Please install Python and add to PATH.", vbCritical, "Voice Typing Error"
-    WScript.Quit 1
-End If
-
-' Run the application hidden (0 = hidden window)
-scriptPath = WshShell.CurrentDirectory & "\main.py"
-WshShell.Run """" & pythonPath & """ """ & scriptPath & """", 0, False
+' Run hidden (0 = no window), don't wait for exit
+Set WshShell = CreateObject("WScript.Shell")
+WshShell.CurrentDirectory = scriptDir
+WshShell.Run """" & pythonExe & """ """ & scriptDir & "\main.py""", 0, False

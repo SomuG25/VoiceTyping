@@ -31,6 +31,7 @@ class TrayApp:
         
         # Callbacks
         self._on_toggle: Optional[Callable[[], None]] = None
+        self._on_retry: Optional[Callable[[], None]] = None
         self._on_settings: Optional[Callable[[], None]] = None
         self._on_exit: Optional[Callable[[], None]] = None
     
@@ -70,20 +71,26 @@ class TrayApp:
         """Create the tray menu."""
         return Menu(
             MenuItem(
-                lambda _: "🔴 Stop Recording" if self._is_recording else "🎤 Start Recording",
+                lambda _: "Stop Recording" if self._is_recording else "Start Recording",
                 self._on_toggle_click,
                 default=True
             ),
+            MenuItem("Retry Last Recording", self._on_retry_click),
             Menu.SEPARATOR,
-            MenuItem("⚙️ Settings", self._on_settings_click),
+            MenuItem("Settings", self._on_settings_click),
             Menu.SEPARATOR,
-            MenuItem("❌ Exit", self._on_exit_click)
+            MenuItem("Exit", self._on_exit_click)
         )
     
     def _on_toggle_click(self, icon, item) -> None:
         """Handle toggle menu click."""
         if self._on_toggle:
             self._on_toggle()
+
+    def _on_retry_click(self, icon, item) -> None:
+        """Handle retry menu click."""
+        if self._on_retry:
+            self._on_retry()
     
     def _on_settings_click(self, icon, item) -> None:
         """Handle settings menu click."""
@@ -96,19 +103,16 @@ class TrayApp:
         if self._on_exit:
             self._on_exit()
     
-    def start(self, 
+    def start(self,
               on_toggle: Optional[Callable[[], None]] = None,
+              on_retry: Optional[Callable[[], None]] = None,
               on_settings: Optional[Callable[[], None]] = None,
               on_exit: Optional[Callable[[], None]] = None) -> None:
         """
         Start the tray application.
-        
-        Args:
-            on_toggle: Callback for toggle recording
-            on_settings: Callback for settings
-            on_exit: Callback for exit
         """
         self._on_toggle = on_toggle
+        self._on_retry = on_retry
         self._on_settings = on_settings
         self._on_exit = on_exit
         self._running = True
