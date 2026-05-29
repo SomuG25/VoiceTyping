@@ -74,6 +74,8 @@ class ArcReactorUI:
         self._root.after(150, self._apply_glass)
 
     def _apply_glass(self):
+        """Make only the background color fully transparent via Win32 color key.
+        Drawn elements stay crisp and fully visible — no black box."""
         try:
             hwnd = self._root.winfo_id()
             ex = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
@@ -81,8 +83,10 @@ class ArcReactorUI:
                 hwnd, win32con.GWL_EXSTYLE,
                 ex | win32con.WS_EX_LAYERED | win32con.WS_EX_TRANSPARENT,
             )
+            # LWA_COLORKEY = background color becomes transparent, content stays opaque
+            # 0x050505 = our TRANSPARENT_KEY color
             win32gui.SetLayeredWindowAttributes(
-                hwnd, 0, self.GLASS_ALPHA, win32con.LWA_ALPHA,
+                hwnd, 0x050505, 0, win32con.LWA_COLORKEY,
             )
         except Exception:
             pass
