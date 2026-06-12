@@ -32,6 +32,7 @@ class TrayApp:
         # Callbacks
         self._on_toggle: Optional[Callable[[], None]] = None
         self._on_retry: Optional[Callable[[], None]] = None
+        self._on_transcribe_file: Optional[Callable[[], None]] = None
         self._on_settings: Optional[Callable[[], None]] = None
         self._on_exit: Optional[Callable[[], None]] = None
     
@@ -77,6 +78,8 @@ class TrayApp:
             ),
             MenuItem("Retry Last Recording", self._on_retry_click),
             Menu.SEPARATOR,
+            MenuItem("📄 Transcribe File...", self._on_transcribe_file_click),
+            Menu.SEPARATOR,
             MenuItem("Settings", self._on_settings_click),
             Menu.SEPARATOR,
             MenuItem("Exit", self._on_exit_click)
@@ -91,6 +94,11 @@ class TrayApp:
         """Handle retry menu click."""
         if self._on_retry:
             self._on_retry()
+
+    def _on_transcribe_file_click(self, icon, item) -> None:
+        """Handle Transcribe File menu click."""
+        if self._on_transcribe_file:
+            self._on_transcribe_file()
     
     def _on_settings_click(self, icon, item) -> None:
         """Handle settings menu click."""
@@ -107,12 +115,15 @@ class TrayApp:
               on_toggle: Optional[Callable[[], None]] = None,
               on_retry: Optional[Callable[[], None]] = None,
               on_settings: Optional[Callable[[], None]] = None,
-              on_exit: Optional[Callable[[], None]] = None) -> None:
+              on_exit: Optional[Callable[[], None]] = None,
+              **kwargs) -> None:
         """
         Start the tray application.
+        Accepts on_transcribe_file=<fn> as a keyword argument.
         """
         self._on_toggle = on_toggle
         self._on_retry = on_retry
+        self._on_transcribe_file = kwargs.get("on_transcribe_file")
         self._on_settings = on_settings
         self._on_exit = on_exit
         self._running = True

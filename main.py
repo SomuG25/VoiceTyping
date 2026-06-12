@@ -23,6 +23,7 @@ from hotkey_handler import HotkeyHandler
 from text_injector import TextInjector, VoiceCommands
 from arc_reactor_ui import ArcReactorUI
 from tray_app import TrayApp
+from file_transcriber_ui import FileTranscriberUI
 
 
 RECORDINGS_DIR = Path(__file__).parent / "recordings"
@@ -38,6 +39,7 @@ class VoiceTypingApp:
         self._text_injector: TextInjector = None
         self._ui: ArcReactorUI = None
         self._tray: TrayApp = None
+        self._file_transcriber: FileTranscriberUI = None
 
         self._is_recording = False
         self._running = False
@@ -69,6 +71,7 @@ class VoiceTypingApp:
         self._text_injector = TextInjector(typing_delay=config.typing_delay)
         self._ui = ArcReactorUI()
         self._tray = TrayApp()
+        self._file_transcriber = FileTranscriberUI(default_model="medium")
 
     # ------------------------------------------------------------------
     # Recording
@@ -218,6 +221,15 @@ class VoiceTypingApp:
         threading.Thread(target=do_retry, daemon=True).start()
 
     # ------------------------------------------------------------------
+    # File Transcriber
+    # ------------------------------------------------------------------
+
+    def _open_file_transcriber(self) -> None:
+        """Open the File Transcriber UI window (from tray menu)."""
+        if self._file_transcriber:
+            self._file_transcriber.open_threadsafe()
+
+    # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
@@ -236,6 +248,7 @@ class VoiceTypingApp:
             self._tray.start(
                 on_toggle=self._toggle_recording,
                 on_retry=self._retry_last,
+                on_transcribe_file=self._open_file_transcriber,
                 on_exit=self._on_exit,
             )
             self._tray.show_notification(
